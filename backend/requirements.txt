@@ -3,7 +3,6 @@ uvicorn==0.52.4
 requests==2.34.2
 python-dotenv==1.2.3
 numpy==2.5.3
-pandas==3.0.5
 scikit-learn==1.9.0
 scipy==1.18.1
 joblib==1.6.0
