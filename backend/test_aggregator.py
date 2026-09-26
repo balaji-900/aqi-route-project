@@ -1,9 +1,7 @@
-from services.aggregator_service import get_best_route_with_aqi
+from services.aggregator_service import get_three_optional_routes, get_best_route_with_aqi
 
-result = get_best_route_with_aqi(28.5642, 77.1806, 28.6562, 77.2410)
-print("Distance:", result["distance_m"], "m")
-print("Time:", result["time_s"], "s")
-print("Exposure score:", result["exposure_score"])
-print("Number of waypoints:", len(result["waypoints"]))
-for wp in result["waypoints"][:5]:
-    print(wp)
+res = get_three_optional_routes(28.5642, 77.1806, 28.6562, 77.2410)
+print(f"Best Route ID: {res['best_route_id']}")
+print(f"Total Routes Returned: {len(res['routes'])}")
+for r in res["routes"]:
+    print(f"- [{r['id']}] {r['name']} ({r['badge']}): {r['total_time_min']} min, {r['total_distance_km']} km, AQI: {r['overall_aqi_score']}, Traffic Delay: +{r['traffic_delay_min']} min, is_best={r['is_best']}")

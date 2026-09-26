@@ -3,13 +3,14 @@ import requests
 from dotenv import load_dotenv
 
 load_dotenv()
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 
 TOMTOM_KEY = os.getenv("TOMTOM_API_KEY")
 
 def get_routes(origin_lat, origin_lon, dest_lat, dest_lon, max_alternatives=2):
     """
     Calls TomTom Routing API and returns a list of route options,
-    each with distance, time, and the polyline (list of lat/lon points).
+    each with distance, time, traffic delay, and the polyline (list of lat/lon points).
     """
     origin = f"{origin_lat},{origin_lon}"
     destination = f"{dest_lat},{dest_lon}"
@@ -25,16 +26,17 @@ def get_routes(origin_lat, origin_lon, dest_lat, dest_lon, max_alternatives=2):
     data = response.json()
 
     routes = []
-    for route in data["routes"]:
-        summary = route["summary"]
+    for route in data.get("routes", []):
+        summary = route.get("summary", {})
         polyline = []
-        for leg in route["legs"]:
-            for point in leg["points"]:
+        for leg in route.get("legs", []):
+            for point in leg.get("points", []):
                 polyline.append([point["latitude"], point["longitude"]])
 
         routes.append({
-            "distance_m": summary["lengthInMeters"],
-            "time_s": summary["travelTimeInSeconds"],
+            "distance_m": summary.get("lengthInMeters", 0),
+            "time_s": summary.get("travelTimeInSeconds", 0),
+            "traffic_delay_s": summary.get("trafficDelayInSeconds", 0),
             "polyline": polyline
         })
 

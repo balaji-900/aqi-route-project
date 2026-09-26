@@ -14,13 +14,20 @@ L.Icon.Default.mergeOptions({
 export default function RouteMap({
   origin,
   destination,
+  routes = [],
   routeData,
+  selectedRouteId,
+  onSelectRoute,
   selectedWaypoint,
   onSelectWaypoint
 }) {
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const layersGroupRef = useRef(null);
+
+  // Normalize route input (support both new routes array and legacy routeData)
+  const routeList = (routes && routes.length > 0) ? routes : (routeData ? [routeData] : []);
+  const activeRoute = routeList.find((r) => r.id === selectedRouteId) || routeList[0] || null;
 
   // Initialize map once
   useEffect(() => {
@@ -33,7 +40,7 @@ export default function RouteMap({
       zoomControl: false,
     });
 
-    // Add Google-like Clean Map Tiles (CartoDB Positron gives that exact clean Google Maps road look)
+    // Add Google-like Clean Map Tiles (CartoDB Voyager)
     L.tileLayer(
       "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
       {
@@ -56,7 +63,7 @@ export default function RouteMap({
     };
   }, []);
 
-  // Update layers whenever origin, destination, or routeData change
+  // Update layers whenever origin, destination, routeList, or activeRoute change
   useEffect(() => {
     const map = mapInstanceRef.current;
     const layerGroup = layersGroupRef.current;
@@ -104,99 +111,188 @@ export default function RouteMap({
         .addTo(layerGroup);
     }
 
-    // 3. Route Polyline + Waypoints + Floating Route Badge
-    if (routeData && routeData.polyline && routeData.polyline.length > 0) {
-      const latLngs = routeData.polyline.map((pt) => [pt[0], pt[1]]);
+    // 3. Render Routes
+    if (routeList.length > 0) {
+      const boundsCollection = [];
 
-      // Outer white border (casing) for high contrast like Google Maps
-      L.polyline(latLngs, {
-        color: "#FFFFFF",
-        weight: 9,
-        opacity: 0.9,
-        lineCap: "round",
-        lineJoin: "round",
-      }).addTo(layerGroup);
+      // A. First render ALTERNATIVE (unselected) routes in lighter, muted paths
+      const unselectedRoutes = routeList.filter(
+        (r) => activeRoute && r.id !== activeRoute.id
+      );
 
-      // Core Google Maps Vibrant Blue Polyline
-      const mainPolyline = L.polyline(latLngs, {
-        color: "#1A73E8",
-        weight: 6,
-        opacity: 0.95,
-        lineCap: "round",
-        lineJoin: "round",
-      }).addTo(layerGroup);
+      unselectedRoutes.forEach((r) => {
+        if (!r.polyline || r.polyline.length === 0) return;
+        const latLngs = r.polyline.map((pt) => [pt[0], pt[1]]);
+        boundsCollection.push(...latLngs);
 
-      // Midpoint Floating Route Badge (Matching User's Screenshot Pill)
-      const midIdx = Math.floor(latLngs.length / 2);
-      const midPoint = latLngs[midIdx];
-      const overallCategory = getAQICategory(routeData.overall_aqi_score);
+        // Lighter casing
+        L.polyline(latLngs, {
+          color: "#FFFFFF",
+          weight: 6,
+          opacity: 0.7,
+          lineCap: "round",
+          lineJoin: "round",
+        }).addTo(layerGroup);
 
-      const floatingPillIcon = L.divIcon({
-        className: "floating-route-pill-container",
-        html: `
-          <div class="floating-route-pill">
-            <div class="pill-time">${routeData.total_time_min} min</div>
-            <div class="pill-dist">${routeData.total_distance_km} km</div>
-            <div class="pill-aqi" style="background-color: ${overallCategory.color}; color: #fff;">
-              AQI ${routeData.overall_aqi_score}
+        // Lighter path line
+        const altPolyline = L.polyline(latLngs, {
+          color: "#64748B", // Muted slate gray/blue
+          weight: 4.5,
+          opacity: 0.75,
+          lineCap: "round",
+          lineJoin: "round",
+          className: "interactive-alt-polyline",
+        }).addTo(layerGroup);
+
+        // Hover & Click interactions for alternative routes
+        altPolyline.on("mouseover", () => {
+          altPolyline.setStyle({ color: "#334155", weight: 6, opacity: 1.0 });
+        });
+        altPolyline.on("mouseout", () => {
+          altPolyline.setStyle({ color: "#64748B", weight: 4.5, opacity: 0.75 });
+        });
+        altPolyline.on("click", () => {
+          if (onSelectRoute) onSelectRoute(r.id);
+        });
+
+        // Floating Midpoint Pill for Alternative Route
+        const midIdx = Math.floor(latLngs.length / 2);
+        const midPoint = latLngs[midIdx];
+        const category = getAQICategory(r.overall_aqi_score);
+
+        const altPillIcon = L.divIcon({
+          className: "floating-route-pill-container",
+          html: `
+            <div class="floating-route-pill alt-route-pill" title="Click to choose ${r.name}">
+              <div class="pill-badge-tag">${r.badge || "Route"}</div>
+              <div class="pill-metrics-row">
+                <span class="pill-time">${r.total_time_min}m</span>
+                <span class="pill-sep">•</span>
+                <span class="pill-dist">${r.total_distance_km}km</span>
+              </div>
+              <div class="pill-aqi-chip" style="background-color: ${category.bg}; color: ${category.text}; border: 1px solid ${category.color};">
+                AQI ${r.overall_aqi_score}
+              </div>
+              <div class="pill-action-hint">Click to select</div>
             </div>
-          </div>
-        `,
-        iconSize: [120, 60],
-        iconAnchor: [60, 30],
+          `,
+          iconSize: [110, 68],
+          iconAnchor: [55, 34],
+        });
+
+        const pillMarker = L.marker(midPoint, { icon: altPillIcon }).addTo(layerGroup);
+        pillMarker.on("click", () => {
+          if (onSelectRoute) onSelectRoute(r.id);
+        });
       });
 
-      L.marker(midPoint, { icon: floatingPillIcon, interactive: false }).addTo(layerGroup);
+      // B. Render the SELECTED / BEST route with the prominent DARKER PATH
+      if (activeRoute && activeRoute.polyline && activeRoute.polyline.length > 0) {
+        const activeLatLngs = activeRoute.polyline.map((pt) => [pt[0], pt[1]]);
+        boundsCollection.push(...activeLatLngs);
 
-      // Waypoints (Substations) Along the Route
-      if (routeData.waypoints && routeData.waypoints.length > 0) {
-        routeData.waypoints.forEach((wp, idx) => {
-          const category = getAQICategory(wp.predicted_aqi);
+        // High-contrast white outer casing
+        L.polyline(activeLatLngs, {
+          color: "#FFFFFF",
+          weight: 10,
+          opacity: 0.98,
+          lineCap: "round",
+          lineJoin: "round",
+        }).addTo(layerGroup);
 
-          const wpIcon = L.divIcon({
-            className: "waypoint-marker",
-            html: `
-              <div class="wp-bubble" style="background-color: ${category.color}; border: 2px solid #FFFFFF;">
-                <span class="wp-number">${idx + 1}</span>
-              </div>
-            `,
-            iconSize: [24, 24],
-            iconAnchor: [12, 12],
-          });
+        // Bold Darker Path: Deep Dark Royal Blue (#0D47A1)
+        const selectedPolyline = L.polyline(activeLatLngs, {
+          color: "#0D47A1", // Darker path as requested
+          weight: 7,
+          opacity: 1.0,
+          lineCap: "round",
+          lineJoin: "round",
+          className: "selected-dark-polyline",
+        }).addTo(layerGroup);
 
-          const popupContent = `
-            <div class="wp-popup-content">
-              <div class="wp-popup-header">
-                <span class="wp-badge">Waypoint #${idx + 1}</span>
-                <span class="wp-eta">+${wp.eta_min} min</span>
-              </div>
-              <div class="wp-aqi-row">
-                <span class="wp-aqi-value" style="color: ${category.color};">${wp.predicted_aqi}</span>
-                <span class="wp-aqi-tag" style="background-color: ${category.bg}; color: ${category.text};">
-                  ${category.label}
+        selectedPolyline.bringToFront();
+
+        // Midpoint Floating Route Badge for Selected Route
+        const midIdx = Math.floor(activeLatLngs.length / 2);
+        const midPoint = activeLatLngs[midIdx];
+        const overallCategory = getAQICategory(activeRoute.overall_aqi_score);
+
+        const selectedPillIcon = L.divIcon({
+          className: "floating-route-pill-container",
+          html: `
+            <div class="floating-route-pill selected-route-pill">
+              <div class="pill-header-row">
+                <span class="pill-badge-tag active ${activeRoute.is_best ? 'best' : ''}">
+                  ${activeRoute.is_best ? "★ " : ""}${activeRoute.badge || "Selected"}
                 </span>
+                ${activeRoute.is_best ? '<span class="pill-best-flag">Best Choice</span>' : ''}
               </div>
-              <div class="wp-popup-sub">
-                Predicted AQI experienced at arrival ETA
+              <div class="pill-time active">${activeRoute.total_time_min} <span class="pill-unit">min</span></div>
+              <div class="pill-dist">${activeRoute.total_distance_km} km ${activeRoute.traffic_delay_min > 0 ? `(+${activeRoute.traffic_delay_min}m traffic)` : ''}</div>
+              <div class="pill-aqi active" style="background-color: ${overallCategory.color}; color: #fff;">
+                Route Exposure AQI: ${activeRoute.overall_aqi_score}
               </div>
             </div>
-          `;
-
-          const marker = L.marker([wp.lat, wp.lon], { icon: wpIcon })
-            .bindPopup(popupContent)
-            .addTo(layerGroup);
-
-          marker.on("click", () => {
-            if (onSelectWaypoint) onSelectWaypoint(idx);
-          });
+          `,
+          iconSize: [140, 80],
+          iconAnchor: [70, 40],
         });
+
+        L.marker(midPoint, { icon: selectedPillIcon, interactive: false }).addTo(layerGroup);
+
+        // Waypoints along the Selected Route
+        if (activeRoute.waypoints && activeRoute.waypoints.length > 0) {
+          activeRoute.waypoints.forEach((wp, idx) => {
+            const category = getAQICategory(wp.predicted_aqi);
+
+            const wpIcon = L.divIcon({
+              className: "waypoint-marker",
+              html: `
+                <div class="wp-bubble" style="background-color: ${category.color}; border: 2.5px solid #FFFFFF;">
+                  <span class="wp-number">${idx + 1}</span>
+                </div>
+              `,
+              iconSize: [24, 24],
+              iconAnchor: [12, 12],
+            });
+
+            const popupContent = `
+              <div class="wp-popup-content">
+                <div class="wp-popup-header">
+                  <span class="wp-badge">Waypoint #${idx + 1} (${activeRoute.name})</span>
+                  <span class="wp-eta">+${wp.eta_min} min</span>
+                </div>
+                <div class="wp-aqi-row">
+                  <span class="wp-aqi-value" style="color: ${category.color};">${wp.predicted_aqi}</span>
+                  <span class="wp-aqi-tag" style="background-color: ${category.bg}; color: ${category.text};">
+                    ${category.label}
+                  </span>
+                </div>
+                <div class="wp-popup-sub">
+                  Predicted AQI experienced at arrival ETA along this route
+                </div>
+              </div>
+            `;
+
+            const marker = L.marker([wp.lat, wp.lon], { icon: wpIcon })
+              .bindPopup(popupContent)
+              .addTo(layerGroup);
+
+            marker.on("click", () => {
+              if (onSelectWaypoint) onSelectWaypoint(idx);
+            });
+          });
+        }
       }
 
-      // Smoothly fit bounds to encompass the entire route with padding
-      map.fitBounds(mainPolyline.getBounds(), {
-        paddingTopLeft: [380, 50],
-        paddingBottomRight: [50, 280],
-      });
+      // Smoothly fit bounds to encompass ALL available routes
+      if (boundsCollection.length > 0) {
+        const fullBounds = L.latLngBounds(boundsCollection);
+        map.fitBounds(fullBounds, {
+          paddingTopLeft: [410, 50],
+          paddingBottomRight: [50, 280],
+        });
+      }
     } else if (origin?.lat && destination?.lat) {
       // Fit bounds between origin and destination
       const bounds = L.latLngBounds([
@@ -205,15 +301,15 @@ export default function RouteMap({
       ]);
       map.fitBounds(bounds, { padding: [100, 100] });
     }
-  }, [origin, destination, routeData, onSelectWaypoint]);
+  }, [origin, destination, routes, routeData, selectedRouteId, onSelectRoute, onSelectWaypoint]);
 
   // Pan to selected waypoint if triggered from the bottom list
   useEffect(() => {
-    if (selectedWaypoint != null && routeData?.waypoints?.[selectedWaypoint] && mapInstanceRef.current) {
-      const wp = routeData.waypoints[selectedWaypoint];
+    if (selectedWaypoint != null && activeRoute?.waypoints?.[selectedWaypoint] && mapInstanceRef.current) {
+      const wp = activeRoute.waypoints[selectedWaypoint];
       mapInstanceRef.current.flyTo([wp.lat, wp.lon], 14, { duration: 1 });
     }
-  }, [selectedWaypoint, routeData]);
+  }, [selectedWaypoint, activeRoute]);
 
   return (
     <div className="map-view-wrapper">
