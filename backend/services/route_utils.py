@@ -1,4 +1,19 @@
-from geopy.distance import geodesic
+import math
+
+
+def _haversine_km(p1, p2):
+    """
+    Returns the great-circle distance in km between two (lat, lon) points.
+    Pure Python — no external dependency needed.
+    """
+    R = 6371.0
+    lat1, lon1 = math.radians(p1[0]), math.radians(p1[1])
+    lat2, lon2 = math.radians(p2[0]), math.radians(p2[1])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    return R * 2 * math.asin(math.sqrt(a))
+
 
 def sample_waypoints(polyline, total_time_s, interval_km=1.5):
     """
@@ -11,7 +26,7 @@ def sample_waypoints(polyline, total_time_s, interval_km=1.5):
     # Calculate cumulative distance along the polyline
     cumulative_distances = [0.0]
     for i in range(1, len(polyline)):
-        d = geodesic(polyline[i - 1], polyline[i]).km
+        d = _haversine_km(polyline[i - 1], polyline[i])
         cumulative_distances.append(cumulative_distances[-1] + d)
 
     total_distance_km = cumulative_distances[-1]
