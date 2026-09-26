@@ -1,8 +1,12 @@
-﻿# Environment variables and API keys
+# Environment variables and API keys
 .env
 *.env
 .env.*
 !.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+
 
 # Python virtual environments
 venv/
@@ -18,6 +22,9 @@ __pycache__/
 *.class
 *.so
 .pytest_cache/
+# Do NOT ignore ML model files — they are required for Render deployment
+!backend/models/*.pkl
+!backend/models/*.json
 
 # Node / Frontend dependencies & builds
 node_modules/
