@@ -76,7 +76,12 @@ def predict_aqi(pollutants: dict, timestamp):
     # Build a numpy array in the exact column order the model expects —
     # no pandas required at all.
     import numpy as np  # already loaded by scikit-learn; just a reference
+    import warnings
     input_array = np.array([[row[col] for col in _feature_cols]], dtype=float)
 
-    prediction = _model.predict(input_array)[0]
+    # Suppress the sklearn "X does not have valid feature names" UserWarning —
+    # we intentionally use a numpy array instead of a DataFrame to save RAM.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)
+        prediction = _model.predict(input_array)[0]
     return round(float(prediction), 1)
