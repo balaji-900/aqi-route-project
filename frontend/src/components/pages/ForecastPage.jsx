@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { BarChart2, RefreshCw, Wind, Thermometer, Droplets, MapPin } from "lucide-react";
 import { getAQICategory } from "../../data/delhiLocations";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "https://aqi-route-project.onrender.com";
+const BACKEND_URL = "";
 
 const FORECAST_LOCATIONS = [
   { name: "R.K. Puram", lat: 28.5642, lon: 77.1806 },
