@@ -7,8 +7,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/best-route': 'http://127.0.0.1:8000',
-      '/health': 'http://127.0.0.1:8000'
+      '/best-route': 'https://aqi-route-project.onrender.com',
+      '/health': 'https://aqi-route-project.onrender.com'
     }
   }
 })
