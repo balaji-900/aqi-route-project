@@ -1,9 +1,27 @@
 import itertools
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from services.tomtom_service import get_routes
 from services.weather_service import get_live_aqi_and_weather
 from services.route_utils import sample_waypoints
 from services.ml_service import predict_aqi
+
+
+def _fetch_waypoint_aqi(wp, now):
+    """Fetch AQI for a single waypoint. Designed to be called in parallel."""
+    try:
+        pollutants = get_live_aqi_and_weather(wp["lat"], wp["lon"])
+        eta_timestamp = now + timedelta(minutes=wp["eta_min"])
+        predicted = predict_aqi(pollutants, eta_timestamp)
+    except Exception as e:
+        print(f"Warning: could not predict AQI at ({wp['lat']}, {wp['lon']}): {e}")
+        predicted = 85.0
+    return {
+        "lat": wp["lat"],
+        "lon": wp["lon"],
+        "eta_min": wp["eta_min"],
+        "predicted_aqi": round(predicted, 1)
+    }
 
 
 def _format_route_item(route_dict, role_id, is_best):
@@ -61,32 +79,29 @@ def get_three_optional_routes(origin_lat, origin_lon, dest_lat, dest_lon):
     scored_candidates = []
 
     for route_idx, route in enumerate(raw_routes):
-        waypoints = sample_waypoints(route["polyline"], route["time_s"], interval_km=1.5)
+        # Use 3km intervals to keep API call count low (~6 waypoints per route)
+        waypoints = sample_waypoints(route["polyline"], route["time_s"], interval_km=3.0)
 
-        waypoint_results = []
+        # ── Parallel AQI fetch: all waypoints on this route at once ──────────
+        waypoint_results_map = {}
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_idx = {
+                executor.submit(_fetch_waypoint_aqi, wp, now): i
+                for i, wp in enumerate(waypoints)
+            }
+            for future in as_completed(future_to_idx):
+                idx = future_to_idx[future]
+                waypoint_results_map[idx] = future.result()
+
+        # Restore original order
+        waypoint_results = [waypoint_results_map[i] for i in range(len(waypoints))]
+
         total_weighted_aqi = 0
         total_time = 0
-
-        for i, wp in enumerate(waypoints):
-            try:
-                pollutants = get_live_aqi_and_weather(wp["lat"], wp["lon"])
-                eta_timestamp = now + timedelta(minutes=wp["eta_min"])
-                predicted = predict_aqi(pollutants, eta_timestamp)
-            except Exception as e:
-                print(f"Warning: could not predict AQI at ({wp['lat']}, {wp['lon']}): {e}")
-                predicted = 85.0
-
-            waypoint_results.append({
-                "lat": wp["lat"],
-                "lon": wp["lon"],
-                "eta_min": wp["eta_min"],
-                "predicted_aqi": round(predicted, 1)
-            })
-
-            if i > 0:
-                segment_time = waypoints[i]["eta_min"] - waypoints[i - 1]["eta_min"]
-                total_weighted_aqi += predicted * segment_time
-                total_time += segment_time
+        for i in range(1, len(waypoint_results)):
+            segment_time = waypoint_results[i]["eta_min"] - waypoint_results[i - 1]["eta_min"]
+            total_weighted_aqi += waypoint_results[i]["predicted_aqi"] * segment_time
+            total_time += segment_time
 
         exposure_score = (
             total_weighted_aqi / total_time
