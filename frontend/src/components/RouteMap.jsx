@@ -40,12 +40,12 @@ export default function RouteMap({
       zoomControl: false,
     });
 
-    // Add Google-like Clean Map Tiles (CartoDB Voyager)
+    // OpenStreetMap tiles — free, no API key required
     L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+      "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
       {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: "abcd",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        subdomains: "abc",
         maxZoom: 19,
       }
     ).addTo(map);
