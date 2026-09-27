@@ -28,6 +28,11 @@ class RouteRequest(BaseModel):
     dest_lon: float
 
 
+@app.get("/")
+def root():
+    return {"status": "ok", "message": "AQI Route API is running. Use /health, /best-route, /aqi-point, /aqi-forecast"}
+
+
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
