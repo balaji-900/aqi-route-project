@@ -16,7 +16,7 @@ import SettingsPage from "./components/pages/SettingsPage";
 import { DELHI_LOCATIONS } from "./data/delhiLocations";
 import "./App.css";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://127.0.0.1:8000";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "https://aqi-route-project.onrender.com";
 const LS_USER_KEY = "aqi_user";
 const LS_THEME_KEY = "aqi_theme";
 
