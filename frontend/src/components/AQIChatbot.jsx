@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { getAQICategory } from "../data/delhiLocations";
 
-const BACKEND_URL = "";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "https://aqi-route-project.onrender.com";
 
 /* ─────────────────────────────────────────────────
    Helper: AQI colour badge
