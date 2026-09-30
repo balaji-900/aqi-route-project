@@ -121,7 +121,7 @@ export default function App() {
       console.error("Route calculation error:", err);
       setError(
         err.message.includes("Failed to fetch")
-          ? "Cannot connect to backend server at http://127.0.0.1:8000. Ensure FastAPI backend is running."
+          ? `Cannot connect to backend server at ${BACKEND_URL || "https://aqi-route-project.onrender.com"}. Ensure the backend is running.`
           : err.message
       );
     } finally {
